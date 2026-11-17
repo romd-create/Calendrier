@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tournée des calendriers</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Calendriers">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+:root{--bg:#fff;--fg:#1c1b19;--mut:#6b6a66;--card:#f4f2ee;--line:#e2dfd8;--red:#c8281e;--ok:#2e7d4f;--re:#d98a00;--no:#7a7a7a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#171615;--fg:#f1efe9;--mut:#a5a39c;--card:#232220;--line:#35332f;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#171615;--fg:#f1efe9;--mut:#a5a39c;--card:#232220;--line:#35332f;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+main{max-width:560px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:0 0 2px}
+.sub{color:var(--mut);font-size:14px;margin-bottom:14px}
+.stats{display:flex;gap:8px;margin-bottom:14px}
+.stat{flex:1;background:var(--card);border-radius:12px;padding:10px;text-align:center}
+.stat b{display:block;font-size:22px}.stat span{font-size:12px;color:var(--mut)}
+.row{display:flex;gap:8px;align-items:center}
+input{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 12px;min-width:0;width:100%}
+button{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 14px;cursor:pointer}
+.primary{background:var(--red);border-color:var(--red);color:#fff;font-weight:600;white-space:nowrap}
+.card{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;margin-top:8px;padding:14px}
+.card small{color:var(--mut)}
+.chip{margin:12px 0 4px;font-size:14px;padding:8px 12px;border-radius:99px}
+.chip.on{background:var(--re);border-color:var(--re);color:#fff}
+.house{background:var(--card);border-radius:12px;margin-top:8px;padding:10px}
+.house .top{display:flex;align-items:center;gap:6px}
+.num{font-size:20px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.st{width:46px;height:46px;padding:0;font-size:20px;opacity:.4;background:var(--bg)}
+.st.sel{opacity:1;border-width:2px}
+.st.ok.sel{border-color:var(--ok)}.st.re.sel{border-color:var(--re)}.st.no.sel{border-color:var(--no)}
+.more{width:38px;padding:0;height:46px;background:none;border:none;color:var(--mut)}
+.det{margin-top:10px;display:grid;gap:8px}
+.back{background:none;border:none;color:var(--red);padding:4px 0;font-weight:600}
+.empty{color:var(--mut);text-align:center;margin:28px 0}
+.foot{color:var(--mut);font-size:12px;text-align:center;margin-top:24px}
+.danger{color:var(--red)}
+.hint{color:var(--mut);font-size:13px;margin:8px 0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chips .chip{margin:4px 0}
+.hero{background:linear-gradient(135deg,#a3120c,#d9372a 55%,#f08a24);color:#fff;border-radius:20px;padding:20px 18px;margin-bottom:14px;box-shadow:0 6px 18px rgba(200,40,30,.28)}
+.hero-t{font-size:23px;font-weight:800;letter-spacing:-.3px}.hero-s{opacity:.92;font-size:14px;margin-top:2px}
+.stat:nth-child(1) b{color:var(--ok)}.stat:nth-child(2) b{color:var(--re)}.stat:nth-child(3) b{color:var(--red)}
+.house{border-left:5px solid transparent}.house.s-ok{border-left-color:var(--ok)}.house.s-re{border-left-color:var(--re)}.house.s-no{border-left-color:var(--no)}
+.sec{font-weight:700;margin:16px 0 2px;color:var(--red)}
+.nav{display:inline-flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:10px;background:var(--bg);border:1px solid var(--line);text-decoration:none;font-size:20px}
+.card{border-radius:14px}.primary{border-radius:12px;box-shadow:0 3px 10px rgba(200,40,30,.3)}
+</style></head>
+<body><main id="app"></main><input type="file" id="fr" accept=".json,application/json" hidden><input type="file" id="fi" accept=".csv,.gz,.txt,text/csv" hidden>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const KEY="tournee-v1";
+let S={streets:[]},view=null,filter=false,open=null,doc=null,adoc=null,saveT=null,A=null,near=null,msg="";
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ST={ok:"✅",re:"🔁",no:"❌"};
+function local(){try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null}}
+function saveLocal(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function setSt(t){const e=$("#sync");if(e)e.textContent=t}
+function save(){
+  saveLocal();clearTimeout(saveT);
+  saveT=setTimeout(async()=>{
+    if(!doc){setSt("Enregistré sur ce téléphone");return}
+    try{await doc.set({json:JSON.stringify(S)});setSt("Enregistré")}catch(e){setSt("Enregistré sur ce téléphone (non synchronisé)")}
+  },500);
+}
+function amt(h){return parseFloat(String(h.amt||"0").replace(",","."))||0}
+function totals(streets){
+  let ok=0,re=0,all=0,sum=0;
+  streets.forEach(s=>s.houses.forEach(h=>{all++;if(h.s==="ok")ok++;if(h.s==="re")re++;sum+=amt(h)}));
+  return{ok,re,all,sum};
+}
+function fmt(n){return n.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:2})}
+function sortH(s){s.houses.sort((a,b)=>{const x=parseInt(a.n)||0,y=parseInt(b.n)||0;return x-y||String(a.n).localeCompare(String(b.n))})}
+
+function render(){
+  const t=totals(S.streets);
+  let h=`<div class="hero"><div class="hero-t">🚒 Tournée des calendriers</div><div class="hero-s">Sapeurs-pompiers · Secteur de Mauzac</div></div>
+  <div class="stats"><div class="stat"><b>${t.ok}</b><span>remis</span></div>
+  <div class="stat"><b>${t.re}</b><span>à repasser</span></div>
+  <div class="stat"><b>${fmt(t.sum)} €</b><span>récolté</span></div></div>`;
+  if(view==="todo"){h+=renderTodo()}
+  else if(view==="map"){h+=`<button class="back" data-a="back">‹ Retour</button><div id="map" style="height:62vh;border-radius:12px;margin-top:8px"></div><div class="hint">🟢 fait / vendu · 🟠 à repasser · 🔴 refus. Touche un point pour voir la maison.</div>`}
+  else if(view==="near"){h+=renderNear()}
+  else if(view===null){
+    h+=`<button class="primary" style="width:100%;margin-bottom:10px" data-a="goNear">📍 Autour de moi</button><button style="width:100%;margin-bottom:10px" data-a="pickList">📋 Choisir une rue dans la liste</button><button style="width:100%;margin-bottom:10px" data-a="goMap">🗺️ Carte de la tournée</button><button style="width:100%;margin-bottom:10px" data-a="goTodo">🔁 Repasses à faire (${t.re})</button>`;
+    h+=`<div class="row"><input id="ns" placeholder="Ajouter une rue" autocomplete="off"><button class="primary" data-a="addStreet">Ajouter</button></div>`;
+    h+=`<button class="chip ${filter?"on":""}" data-a="filter">🔁 À repasser seulement</button>`;
+    let n=0;
+    S.streets.forEach((s,i)=>{
+      const c=totals([s]);
+      if(filter&&!c.re)return;
+      n++;
+      h+=`<button class="card" data-a="openStreet" data-i="${i}"><span><b>${esc(s.name)}</b><br><small>${c.ok}/${c.all} remis${c.re?" · "+c.re+" à repasser":""}</small></span><span>›</span></button>`;
+    });
+    if(!n)h+=`<div class="empty">${filter?"Rien à repasser pour l’instant.":"Ajoute ta première rue pour commencer."}</div>`;
+  }else{
+    const s=S.streets[view];
+    h+=`<button class="back" data-a="back">‹ Toutes les rues</button><h1 style="margin:6px 0 12px">${esc(s.name)}</h1>
+    <div class="row"><input id="nh" placeholder="N° de maison (ex. 12 ou 12 bis)" autocomplete="off"><button class="primary" data-a="addHouse">Ajouter</button></div>
+    <button class="chip ${filter?"on":""}" data-a="filter">🔁 À repasser seulement</button>`;
+    let n=0;
+    s.houses.forEach((x,j)=>{
+      if(filter&&x.s!=="re")return;
+      n++;
+      const k=view+"-"+j,o=open===k;
+      h+=`<div class="house s-${x.s||"n"}"><div class="top"><div class="num">${esc(x.n)}${x.note?" 📝":""}${x.amt?" 💶":""}</div>
+      ${["ok","re","no"].map(c=>`<button class="st ${c} ${x.s===c?"sel":""}" data-a="setS" data-h="${j}" data-v="${c}">${ST[c]}</button>`).join("")}
+      <button class="more" data-a="more" data-h="${j}">${o?"▴":"▾"}</button></div>
+      ${o?`<div class="det"><input data-f="note" data-h="${j}" placeholder="Note (ex. repasser après 18h)" value="${esc(x.note||"")}">
+      <input data-f="amt" data-h="${j}" inputmode="decimal" placeholder="Montant donné (€)" value="${esc(x.amt||"")}">
+      <button class="danger" data-a="delHouse" data-h="${j}">Supprimer cette maison</button></div>`:""}</div>`;
+    });
+    if(!n)h+=`<div class="empty">${filter?"Rien à repasser dans cette rue.":"Aucune maison pour l’instant."}</div>`;
+    h+=`<button class="danger" style="margin-top:20px;width:100%" data-a="delStreet">Supprimer cette rue</button>`;
+  }
+  if(view===null)h+=`<button style="width:100%;margin-top:16px" data-a="backup">💾 Sauvegarder mes données</button><button style="width:100%;margin-top:8px" data-a="restore">♻️ Restaurer une sauvegarde</button>`;
+  if(view===null)h+=`<button style="width:100%;margin-top:8px" data-a="importAddr">📥 ${A?"Mettre à jour":"Importer"} les adresses de Mauzac</button>`;
+  if(msg&&view!=="near")h+=`<div class="hint">${esc(msg)}</div>`;
+  h+=`<div class="foot" id="sync"></div>`;
+  $("#app").innerHTML=h;if(view==="map")drawMap();
+}
+
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-a]");if(!b)return;
+  const a=b.dataset.a,h=+b.dataset.h;
+  if(a==="backup"){try{const bl=new Blob([JSON.stringify(S)],{type:"application/json"}),u=URL.createObjectURL(bl),l=document.createElement("a");l.href=u;l.download="tournee-calendriers-"+new Date().toISOString().slice(0,10)+".json";document.body.appendChild(l);l.click();l.remove();msg="Sauvegarde créée dans tes fichiers."}catch(e){msg="Sauvegarde impossible."}}
+  else if(a==="restore"){$("#fr").click()}
+  else if(a==="goMap"){view="map"}
+  else if(a==="goTodo"){view="todo"}
+  else if(a==="todoS"){S.streets[+b.dataset.i].houses[h].s=b.dataset.v;save()}
+  else if(a==="pickList"){view="near";near={manual:true};msg=""}
+  else if(a==="manualBack"){near.si=null}
+  else if(a==="goNear"){view="near";near=null;msg="";if(A&&A.s.length)locate()}
+  else if(a==="pickStreet"){near.si=+b.dataset.si}
+  else if(a==="nearS"){const x=getH((near.A||A).s[+b.dataset.si].n,b.dataset.n,true);if(b.dataset.lo){x.lo=+b.dataset.lo;x.la=+b.dataset.la}x.s=x.s===b.dataset.v?"":b.dataset.v;save()}
+  else if(a==="nearAdd"){const v=$("#nn").value.trim();if(v){getH((near.A||A).s[near.cur].n,v,true);save()}}
+  else if(a==="importAddr"){$("#fi").click()}
+  else if(a==="openStreet"){view=+b.dataset.i;open=null}
+  else if(a==="back"){view=null;open=null}
+  else if(a==="filter"){filter=!filter}
+  else if(a==="addStreet"){
+    const v=$("#ns").value.trim();if(!v)return;
+    S.streets.push({name:v,houses:[]});
+    S.streets.sort((x,y)=>x.name.localeCompare(y.name,"fr"));
+    view=S.streets.findIndex(s=>s.name===v);open=null;save();
+  }
+  else if(a==="addHouse"){
+    const v=$("#nh").value.trim();if(!v)return;
+    const s=S.streets[view];
+    if(!s.houses.some(x=>x.n.toLowerCase()===v.toLowerCase())){s.houses.push({n:v,s:"",note:"",amt:""});sortH(s);save()}
+    open=null;
+  }
+  else if(a==="setS"){
+    const x=S.streets[view].houses[h];x.s=x.s===b.dataset.v?"":b.dataset.v;save();
+  }
+  else if(a==="more"){const k=view+"-"+h;open=open===k?null:k}
+  else if(a==="delHouse"){if(!confirm("Supprimer cette maison ?"))return;S.streets[view].houses.splice(h,1);open=null;save()}
+  else if(a==="delStreet"){if(!confirm("Supprimer cette rue et toutes ses maisons ?"))return;S.streets.splice(view,1);view=null;open=null;save()}
+  render();
+});
+document.addEventListener("change",e=>{
+  const f=e.target.dataset&&e.target.dataset.f;if(!f)return;
+  S.streets[view].houses[+e.target.dataset.h][f]=e.target.value.trim();
+  save();render();
+});
+document.addEventListener("keydown",e=>{
+  if(e.key!=="Enter")return;
+  if(e.target.id==="ns")document.querySelector('[data-a="addStreet"]').click();
+  if(e.target.id==="nh")document.querySelector('[data-a="addHouse"]').click();
+});
+
+function getH(name,n,create){
+  let s=S.streets.find(x=>x.name.toLowerCase()===name.toLowerCase());
+  if(!s){if(!create)return null;s={name,houses:[]};S.streets.push(s);S.streets.sort((x,y)=>x.name.localeCompare(y.name,"fr"))}
+  let h=s.houses.find(x=>String(x.n).toLowerCase()===String(n).toLowerCase());
+  if(!h&&create){h={n:String(n),s:"",note:"",amt:""};s.houses.push(h);sortH(s)}
+  return h||null;
+}
+function dist(a,b,c,d){const k=Math.PI/180;return Math.hypot((c-a)*Math.cos((b+d)/2*k),d-b)*111320}
+function locate(){
+  if(!navigator.geolocation){near={err:1};msg="Position indisponible sur cet appareil.";render();return}
+  navigator.geolocation.getCurrentPosition(p=>{
+      const lat=p.coords.latitude,lon=p.coords.longitude;near={lat,lon};
+      let dm=1e9;if(A)A.s.forEach(s=>s.p.forEach(q=>{const d=dist(lon,lat,q[1],q[2]);if(d<dm)dm=d}));
+      if(dm<300){render();return}
+      near.loading=1;render();apiNear(lat,lon);
+    },
+    ()=>{near={err:1};msg="Position refusée ou indisponible. Autorise la localisation, puis réessaie.";render()},
+    {enableHighAccuracy:true,timeout:15000,maximumAge:5000});
+}
+function renderNear(){
+  let h=`<button class="back" data-a="back">‹ Retour</button><h1 style="margin:6px 0 8px">📍 Autour de moi</h1>`;
+  if((!A||!A.s.length)&&!(near&&near.A))return h+`<div class="hint">Il manque la liste des adresses de Mauzac. Importe le fichier CSV de la commune (adresse.data.gouv.fr).</div><button class="primary" data-a="importAddr">📥 Importer le fichier</button><div class="hint">${esc(msg)}</div>`;
+  if(!near||near.loading)return h+`<div class="empty">Localisation en cours…</div>`;
+  if(near.err)return h+`<div class="hint">${esc(msg)}</div><button data-a="goNear">Réessayer</button><button style="width:100%;margin-top:10px" class="primary" data-a="pickList">📋 Choisir une rue dans la liste</button>`;
+  if(near.manual&&near.si==null)return h+`<input id="q" placeholder="🔍 Chercher une rue…" autocomplete="off" style="margin-bottom:6px"><div id="list">`+A.s.map((s,si)=>`<button class="card" data-name="${esc(s.n)}" data-a="pickStreet" data-si="${si}"><b>${esc(s.n)}</b><small>${s.p.length} n°</small></button>`).join("")+`</div>`;
+  const man=!!near.manual;
+  const AA=near.A||A;
+  const pts=[];
+  if(!man)AA.s.forEach((s,si)=>s.p.forEach(q=>pts.push({si,d:dist(near.lon,near.lat,q[1],q[2])})));
+  pts.sort((a,b)=>a.d-b.d);
+  const sts=[];pts.slice(0,40).forEach(p=>{if(!sts.includes(p.si))sts.push(p.si)});
+  const cur=near.si!=null?near.si:sts[0];near.cur=cur;
+  const st=AA.s[cur];
+  if(man)h+=`<button class="back" data-a="manualBack">‹ Changer de rue</button><h2 style="margin:0 0 8px">${esc(st.n)}</h2>`;
+  h+=`<div class="chips">${sts.slice(0,5).map(si=>`<button class="chip ${si===cur?"on":""}" data-a="pickStreet" data-si="${si}">${esc(AA.s[si].n)}</button>`).join("")}</div>`;
+  const rows=[],seen=new Set();
+  st.p.map(q=>({n:String(q[0]),lo:q[1],la:q[2],d:man?null:dist(near.lon,near.lat,q[1],q[2])})).sort((a,b)=>man?(parseInt(a.n)-parseInt(b.n)||a.n.localeCompare(b.n)):a.d-b.d).forEach(r=>{const k=r.n.toLowerCase();if(!seen.has(k)){seen.add(k);rows.push(r)}});
+  const top=rows.slice(0,man?300:14),tk=new Set(top.map(r=>r.n.toLowerCase()));
+  const sx=S.streets.find(x=>x.name.toLowerCase()===st.n.toLowerCase());
+  if(sx)sx.houses.forEach(x=>{const k=String(x.n).toLowerCase();if(!tk.has(k)){tk.add(k);const r=rows.find(r=>r.n.toLowerCase()===k);top.push({n:String(x.n),d:r?r.d:null})}});
+  top.forEach(r=>{
+    const x=getH(st.n,r.n,false),v=x?x.s:"";
+    h+=`<div class="house s-${v||"n"}"><div class="top"><div class="num">${esc(r.n)} <small style="color:var(--mut);font-weight:400">${r.d==null?(man?"":"ajouté"):Math.round(r.d)+" m"}</small></div>${["ok","re","no"].map(c=>`<button class="st ${c} ${v===c?"sel":""}" data-a="nearS" data-si="${cur}" data-n="${esc(r.n)}" data-lo="${r.lo??""}" data-la="${r.la??""}" data-v="${c}">${ST[c]}</button>`).join("")}</div></div>`;
+  });
+  h+=`<div class="row" style="margin-top:14px"><input id="nn" placeholder="Numéro absent de la liste"><button class="primary" data-a="nearAdd">Ajouter</button></div><button style="width:100%;margin-top:10px" data-a="goNear">🔄 Actualiser ma position</button>`;
+  return h;
+}
+async function readFile(f){
+  if(/\.gz$/i.test(f.name)){
+    if(!window.DecompressionStream)throw new Error("gz");
+    return await new Response(f.stream().pipeThrough(new DecompressionStream("gzip"))).text();
+  }
+  return await f.text();
+}
+function parseBAN(t){
+  const L=t.split(/\r?\n/),hd=L[0].replace(/"/g,"").split(";"),ix=(...k)=>{for(const x of k){const i=hd.indexOf(x);if(i>=0)return i}return -1};
+  const iN=ix("numero"),iR=ix("rep","suffixe"),iV=ix("nom_voie","voie_nom","toponyme"),iX=ix("lon","long"),iY=ix("lat");
+  if(iN<0||iV<0||iX<0||iY<0)throw new Error("format");
+  const m={};let c=0;
+  for(let i=1;i<L.length;i++){
+    const r=L[i].replace(/"/g,"").split(";");
+    const num=parseInt(r[iN]);if(!num||num>=9999)continue;
+    const lon=parseFloat(r[iX]),lat=parseFloat(r[iY]),nom=(r[iV]||"").trim();
+    if(!nom||isNaN(lon)||isNaN(lat))continue;
+    const rep=iR>=0?(r[iR]||"").trim():"";
+    (m[nom]=m[nom]||[]).push([num+(rep?" "+rep:""),+lon.toFixed(5),+lat.toFixed(5)]);c++;
+  }
+  if(!c)throw new Error("vide");
+  return{s:Object.keys(m).sort((a,b)=>a.localeCompare(b,"fr")).map(n=>({n,p:m[n]})),c};
+}
+document.addEventListener("change",async e=>{
+  if(e.target.id!=="fi")return;
+  const f=e.target.files[0];if(!f)return;
+  msg="Lecture du fichier…";render();
+  try{
+    A=parseAddr(await readFile(f));
+    const j=JSON.stringify(A);
+    try{localStorage.setItem("tournee-addr",j)}catch(x){}
+    if(adoc){try{await adoc.set({json:j})}catch(x){}}
+    msg=A.c+" adresses importées pour "+A.s.length+" voies.";
+  }catch(x){msg="Fichier non reconnu ("+(x&&x.message||x)+"). Colonnes lues : "+LH}
+  e.target.value="";render();
+});
+const EMB={"s":[{"n":"Allée des Platanes","p":[["1",1.2917,43.37651],["1 bis",1.29166,43.37646],["2",1.2915,43.37611],["3",1.29164,43.37637],["3 a",1.29155,43.37636],["4",1.29152,43.37597],["5",1.29151,43.37631],["6",1.29141,43.37589],["7",1.2915,43.37611],["8",1.29134,43.37584],["9",1.2914,43.37622],["10",1.29119,43.37572],["11",1.29136,43.37618],["12",1.29104,43.37561],["13",1.29127,43.37609],["17",1.29093,43.3757],["19",1.2911,43.37587],["21",1.29093,43.3757]]},{"n":"Ancienne Route de Lavernose","p":[["2",1.28025,43.38339],["4",1.28005,43.38323],["6",1.28033,43.38313],["6 bis",1.28065,43.38303],["6 quart",1.28086,43.3835],["6 ter",1.28086,43.38351],["13",1.2909,43.37866],["15",1.27851,43.38465],["17",1.27806,43.3837],["19",1.27859,43.38378],["25",1.27914,43.38337],["26",1.28931,43.37885],["28",1.28929,43.37873],["29",1.2797,43.38328],["31",1.27985,43.38321],["35",1.28034,43.38302],["38",1.28072,43.38299],["38 bis",1.28073,43.383],["38 ter",1.28072,43.38303],["39",1.28001,43.38314],["40",1.2811,43.38303],["48",1.28108,43.38229]]},{"n":"Avenue des Pyrénées","p":[["3",1.29187,43.37279],["5",1.29295,43.37537],["6",1.29156,43.36978],["8",1.29156,43.36978],["9",1.29187,43.37279],["10",1.2929,43.37497],["12",1.29297,43.37488],["14",1.29285,43.37486],["16",1.29283,43.37481],["18",1.2928,43.37473],["19",1.29187,43.37279],["20",1.29156,43.36978],["21",1.29238,43.37416],["22",1.2924,43.37401],["24",1.2924,43.37401],["26",1.2924,43.37401],["32",1.29194,43.37301],["38",1.29232,43.37184],["38 a",1.29276,43.37163],["38 b",1.29164,43.37168],["38 t",1.29232,43.37038],["40",1.29156,43.36978],["42",1.29153,43.37129],["44",1.29152,43.37087],["44 bis",1.29154,43.37074],["46",1.29152,43.37063],["48",1.2924,43.37025],["50",1.29154,43.37029],["50 bis",1.29156,43.36978],["52",1.2924,43.37025],["52 bis",1.29156,43.36986],["54",1.29156,43.36986],["56",1.29156,43.36978]]},{"n":"Chemin de Bonzom","p":[["29",1.29647,43.36957]]},{"n":"Chemin de Bourgine","p":[["20",1.31627,43.37304],["21",1.31675,43.37253]]},{"n":"Chemin de Bouzom","p":[["29",1.29622,43.36951]]},{"n":"Chemin de la Brosse","p":[["1",1.31896,43.37431],["2",1.31892,43.37402],["7",1.31879,43.37377],["13",1.31868,43.37327]]},{"n":"Chemin de la Chaumine","p":[["1",1.28102,43.3828],["3",1.28066,43.38213],["5",1.2807,43.38144],["7",1.28039,43.38075]]},{"n":"Chemin de la Hille","p":[["1",1.29106,43.37897],["2",1.29058,43.37977]]},{"n":"Chemin de Nautin","p":[["16",1.3128,43.37615],["19",1.31294,43.37616],["20",1.31361,43.37658]]},{"n":"Chemin de Pomarède","p":[["20",1.30226,43.36839]]},{"n":"Chemin des Douze","p":[["1",1.29723,43.37447],["4",1.29722,43.3752],["6",1.29682,43.37539],["9",1.29736,43.37539],["11",1.29814,43.37541],["14",1.2971,43.37597],["17",1.29749,43.3761],["18",1.29677,43.37689],["19",1.29742,43.37637],["20",1.29693,43.37647],["21",1.297,43.3768],["21 bis",1.29846,43.37678],["22",1.29649,43.37691],["23",1.29763,43.37686],["25",1.29732,43.377],["25 bis",1.29677,43.37689],["27",1.29609,43.37723],["29",1.29677,43.37689],["31",1.29583,43.37774],["99",1.29677,43.37689]]},{"n":"Chemin des Nauzes","p":[["3",1.27929,43.38318],["4",1.27906,43.38317],["6",1.27889,43.38306],["7",1.27903,43.38303],["8",1.27841,43.38299],["9",1.2789,43.38295],["11",1.27885,43.38287],["17",1.27841,43.38285],["23",1.27769,43.3828],["25",1.27757,43.38272],["30",1.27576,43.38338]]},{"n":"Chemin des Tambourets","p":[["91",1.32018,43.38188],["111",1.3216,43.38037]]},{"n":"Chemin du Hil","p":[["10",1.3223,43.36893],["244",1.32255,43.36931],["270",1.32255,43.36931]]},{"n":"Chemin du Pradas","p":[["1",1.28288,43.38031],["2",1.28268,43.38039],["4",1.28305,43.38032],["5",1.28192,43.38057],["5 bis",1.28189,43.38045],["7",1.28323,43.3806],["9",1.28417,43.38149],["19",1.28417,43.38149],["21",1.2835,43.38107],["22",1.28323,43.38114],["23",1.28353,43.38093],["24",1.28274,43.38126],["25",1.28252,43.38138],["26",1.28224,43.38152],["30",1.28345,43.38069],["30 a",1.28162,43.38059],["31",1.28155,43.38039],["32",1.28224,43.37886],["35",1.28212,43.37879],["40",1.28417,43.38149],["42",1.28175,43.37815],["44",1.28165,43.37801],["44 bis",1.28233,43.37788],["51",1.28106,43.37744],["52",1.2815,43.37727],["52 bis",1.28122,43.3773],["53",1.28388,43.38135],["53 bis",1.2839,43.38137]]},{"n":"Chemin du Riou","p":[["3",1.28699,43.37507]]},{"n":"Chemin Limaque","p":[["1",1.28498,43.37566],["3",1.28473,43.37576],["5",1.28452,43.37581],["7",1.28429,43.37588],["9",1.28398,43.37598],["9 bis",1.28388,43.37603],["9 ter",1.28382,43.37607],["32",1.28317,43.37639],["34",1.28269,43.37693],["36",1.2824,43.37745],["38",1.28237,43.37805],["39",1.28229,43.37834],["40",1.28196,43.37847],["41",1.28213,43.37849]]},{"n":"clos périsse","p":[["1",1.28356,43.37507],["2",1.2834,43.37526],["3",1.28359,43.3752],["4",1.28304,43.37537],["5",1.28372,43.37525],["6",1.28275,43.37545],["7",1.28358,43.37525],["8",1.28226,43.37546],["9",1.28341,43.37531],["9 bis",1.28278,43.37553],["10",1.28209,43.37519],["11",1.28321,43.37538],["12",1.28249,43.37507],["13",1.28293,43.37547],["14",1.2827,43.37481],["15",1.28268,43.37554],["16",1.283,43.37474],["17",1.28246,43.37563],["19",1.28224,43.37569],["21",1.28224,43.37561],["23",1.28218,43.37553],["25",1.28207,43.37532],["27",1.28192,43.37501],["29",1.28187,43.37503],["31",1.28197,43.37499],["33",1.28224,43.3749],["35",1.28257,43.3748],["37",1.28288,43.3747],["39",1.28315,43.37462],["41",1.28324,43.37463],["43",1.28343,43.37486]]},{"n":"Impasse de la Palanquette","p":[["1",1.29505,43.37507],["2",1.29514,43.37504],["3",1.29499,43.3749],["4",1.29506,43.3748],["5",1.29491,43.37466],["6",1.29582,43.37454],["8",1.295,43.37453]]},{"n":"impasse de la Pyramide","p":[["13",1.27815,43.37636]]},{"n":"Impasse du Bac","p":[["2",1.29211,43.3768],["3",1.29237,43.37708],["4",1.29221,43.37691],["6",1.29226,43.37695],["8",1.29233,43.37703]]},{"n":"Impasse du Moulin","p":[["1",1.29065,43.37832],["3",1.29077,43.37837],["7",1.29111,43.37848]]},{"n":"Impasse Emile Blanchard","p":[["1",1.29078,43.37612],["2",1.29072,43.37622],["3",1.29078,43.37617],["4",1.29075,43.37613]]},{"n":"la Pujole","p":[["5",1.28189,43.38051]]},{"n":"La Pujolo","p":[["5",1.28189,43.38051]]},{"n":"Las Taillados","p":[["123",1.32271,43.36402]]},{"n":"Le Bounzom","p":[["6",1.29885,43.36933]]},{"n":"Le Camp Gros","p":[["5",1.28477,43.376]]},{"n":"Le Pradas","p":[["1",1.28293,43.38032],["6",1.28185,43.38037],["9",1.28272,43.38085],["21",1.27877,43.37898],["22",1.27726,43.38006],["29",1.28178,43.38081]]},{"n":"Le Village","p":[["72",1.29269,43.37504]]},{"n":"Les Pitchous","p":[["168",1.30893,43.37091]]},{"n":"Lotissement des Jardins","p":[["1",1.29263,43.37357],["2",1.29264,43.37345],["3",1.29279,43.37349],["4",1.29293,43.37335],["5",1.2931,43.37338],["6",1.29325,43.37323],["7",1.29309,43.37338],["8",1.29356,43.37313],["9",1.29309,43.37338],["10",1.29396,43.37339],["11",1.2937,43.37319],["13",1.29419,43.37309],["15",1.29419,43.37326]]},{"n":"Lotissement des Platanes","p":[["1",1.29125,43.37125],["2",1.29113,43.37077],["3",1.29081,43.37128],["4",1.2908,43.3708],["5",1.29039,43.37125],["6",1.29019,43.37088],["7",1.2901,43.37124],["8",1.28986,43.37095],["9",1.28975,43.37126],["10",1.2895,43.371],["11",1.28969,43.3715],["12",1.28911,43.37105],["13",1.28937,43.37154],["14",1.28919,43.3713]]},{"n":"Lotissement Le Magnolia","p":[["1",1.29217,43.37502],["2",1.29226,43.375],["3",1.29202,43.37486],["5",1.29206,43.37483],["6",1.29216,43.37481]]},{"n":"Lotissement le Platane","p":[["1",1.29116,43.37095],["2",1.29119,43.37082],["2 a",1.29115,43.37095],["3",1.29114,43.37095],["4",1.29067,43.3708],["5",1.29115,43.37095],["6",1.2902,43.371],["7",1.28965,43.37111],["8",1.28987,43.37105],["9",1.28951,43.37121],["10",1.28946,43.37099],["11",1.29115,43.37095],["12",1.28938,43.37116],["13",1.28943,43.37142],["14",1.2894,43.37133]]},{"n":"Lotissement Le Pradas","p":[["2",1.28255,43.38117],["29",1.28178,43.38084]]},{"n":"Lotissement Pradas","p":[["1",1.28293,43.38032],["6",1.28184,43.38037],["9",1.27952,43.37936],["21",1.27877,43.37881],["22",1.27714,43.37955],["29",1.28178,43.3808]]},{"n":"Place du Peyré","p":[["1",1.29065,43.37562],["3",1.29052,43.37565],["5",1.29041,43.37568],["7",1.29037,43.3757],["9",1.29029,43.37562],["9 bis",1.2902,43.37565],["9 ter",1.29023,43.37569],["11",1.29027,43.37559],["13",1.29023,43.37543],["13 bis",1.29016,43.37549],["17",1.29055,43.37608],["19",1.29061,43.37606]]},{"n":"place saint-étienne","p":[["1",1.29184,43.37601],["2",1.29218,43.3761],["3",1.29187,43.37607],["4",1.2925,43.37612],["5",1.29187,43.37607],["7",1.29187,43.37607]]},{"n":"Route de Carpentier Cabirol","p":[["2 bis",1.3069,43.37806],["3",1.30664,43.378],["4",1.30841,43.3792],["4 bis",1.30664,43.37808],["6",1.31258,43.38094],["10",1.31289,43.38057],["11",1.3077,43.37784],["12",1.30842,43.3778],["14",1.30865,43.37882],["16",1.31283,43.38064],["18",1.30899,43.37767],["18 a",1.30882,43.37808],["18 b",1.30907,43.37765],["18 t",1.30915,43.37763],["20",1.30905,43.37816],["20 bis",1.30931,43.37759],["22",1.30953,43.37758],["22 bis",1.30948,43.37758],["24",1.30959,43.37756],["25",1.30989,43.37748],["26",1.31036,43.37761],["27",1.31048,43.37756],["28",1.31036,43.37761],["29",1.3105,43.37756],["31",1.31069,43.37763],["36",1.31343,43.38087],["38",1.3106,43.37767],["38 a",1.31397,43.37923],["40",1.31095,43.37776],["45",1.31504,43.37853],["50",1.31276,43.37812],["52",1.31304,43.37823],["54",1.31405,43.37912],["56",1.31411,43.37904],["58",1.31369,43.37964],["60",1.31428,43.37875],["62",1.31433,43.37876],["64",1.31309,43.38045],["66",1.31321,43.38042],["68",1.31346,43.38025],["70",1.31433,43.37876],["75",1.31562,43.37885],["79",1.30641,43.37815]]},{"n":"Route de Frances de Lèze","p":[["131",1.32093,43.36371],["133",1.32121,43.3637]]},{"n":"Route de Las Taillados","p":[["11",1.31119,43.37082],["55",1.31466,43.36817],["66",1.31551,43.36729],["67",1.31547,43.36697],["68",1.31599,43.36695],["82",1.31694,43.36613],["84",1.31764,43.36583],["85",1.31704,43.36599],["87",1.30985,43.37128],["88",1.30985,43.37128],["89",1.31761,43.36574],["90",1.30985,43.37128],["91",1.31805,43.36557],["92",1.30985,43.37128],["94",1.31813,43.36554],["96",1.31817,43.36552],["98",1.31875,43.36576],["99",1.31857,43.36539],["100",1.31904,43.36554],["103",1.31913,43.3652],["106",1.3194,43.36527],["111",1.31953,43.36508],["113",1.31933,43.36483],["116",1.32062,43.36485],["117",1.31982,43.365],["118",1.32102,43.36471],["121",1.32024,43.36483],["123",1.30985,43.37128],["124",1.32141,43.36458],["125",1.30985,43.37128],["130",1.3217,43.36447],["130 bis",1.30985,43.37128],["130 ter",1.3223,43.36424],["131",1.30985,43.37128],["136",1.32295,43.36403],["146",1.32379,43.36375],["148",1.32347,43.36385],["150",1.32458,43.36364],["154",1.32512,43.36358],["170",1.30985,43.37128],["176",1.32743,43.36303]]},{"n":"Route de Lavernose","p":[["1",1.27698,43.38621],["2",1.27657,43.38568],["4",1.27636,43.38536],["15",1.29014,43.37913],["25",1.27935,43.38346],["1808",1.27407,43.38745]]},{"n":"Route de l’Aouach","p":[["67",1.30567,43.376],["69",1.30547,43.37653],["75",1.30557,43.37688],["80",1.30552,43.3772],["83",1.3058,43.37746],["83 bis",1.30576,43.3774],["84",1.30565,43.37768],["92",1.30622,43.37829],["92 bis",1.30578,43.37801],["97",1.30656,43.37886],["101",1.30671,43.37919],["105",1.30687,43.37975],["111",1.3069,43.38002],["112",1.30684,43.38009],["114",1.30693,43.37998],["116",1.30686,43.38045],["117",1.30776,43.381],["120",1.30688,43.38068],["121",1.30704,43.38068],["122",1.30629,43.38104],["124",1.3059,43.38115],["124 bis",1.30499,43.38142],["126",1.30695,43.38108],["133",1.30976,43.38109]]},{"n":"Route de Montaut","p":[["34",1.29963,43.36888],["35",1.29951,43.36928],["38",1.29963,43.36852],["42",1.30009,43.36801],["43",1.29961,43.36815],["45",1.29965,43.36782],["46",1.29973,43.36772],["47",1.29976,43.36753],["50",1.29978,43.36738],["54",1.29985,43.36705],["58",1.29985,43.36677],["60",1.30056,43.36658],["62",1.29979,43.36621],["63",1.3014,43.3714],["66",1.3,43.36615],["68",1.29993,43.36562]]},{"n":"Route de Saint-geniès","p":[["1",1.30549,43.3752],["2",1.30548,43.37528],["10",1.30636,43.37536],["16",1.30722,43.37538],["17",1.30732,43.37529],["20",1.30794,43.37531],["28",1.30879,43.37518],["34",1.30836,43.37524],["36",1.30946,43.37523],["40",1.30998,43.37535],["41",1.31021,43.37537],["42",1.31036,43.37538],["45",1.31087,43.37529],["47",1.31116,43.37536],["56",1.31189,43.37526],["58",1.31223,43.3752],["60",1.3125,43.37512],["71",1.31377,43.37474],["76",1.31442,43.37472],["84",1.31489,43.37466],["85",1.31532,43.37456],["91",1.31751,43.3746],["93",1.31811,43.37449],["98",1.31707,43.37461],["100",1.3178,43.37469],["108",1.31817,43.37468],["110",1.31855,43.37461],["138",1.32173,43.37392],["139",1.32149,43.3739],["142",1.31895,43.37445]]},{"n":"Route de Saint-sulpice","p":[["1",1.29189,43.37604],["2",1.29203,43.37638],["2 bis",1.29202,43.37635],["3",1.29191,43.37601],["4",1.29197,43.37624],["5",1.29187,43.3759],["7",1.29204,43.37579],["12",1.29317,43.3756],["13",1.29251,43.37566],["13 bis",1.29262,43.37565],["15",1.29279,43.37565],["16",1.29518,43.3753],["17",1.29553,43.37515],["19",1.29347,43.37486],["21",1.29364,43.37546],["23",1.29596,43.37508],["24",1.29521,43.37522],["26",1.29449,43.37543],["27",1.29432,43.37535],["27 bis",1.29421,43.37537],["29",1.29442,43.37537],["31",1.29555,43.37515],["33",1.29575,43.37479],["35",1.29673,43.37488],["37",1.2968,43.37487],["39",1.29659,43.37448],["40",1.29696,43.37406],["41",1.2969,43.37425],["42",1.29773,43.37359],["47",1.29685,43.3738],["65",1.29943,43.37195],["65 bis",1.30005,43.37195],["109",1.3046,43.37129],["118",1.30633,43.37151],["127",1.30759,43.37136],["128",1.3073,43.37143],["135",1.3085,43.37117],["135 bis",1.30829,43.37116],["136",1.30836,43.37172],["185",1.31429,43.37077],["190",1.31498,43.37057],["192",1.31529,43.37047],["208",1.31693,43.36991],["216",1.31785,43.36961],["218",1.31814,43.36944],["226",1.31887,43.36902],["232",1.31938,43.36886],["234",1.31987,43.36858],["236",1.31945,43.36881],["244",1.32103,43.3683],["256",1.32178,43.36834],["258",1.32251,43.36795],["262",1.32312,43.36785],["278",1.32405,43.36882],["280",1.32503,43.36761],["282",1.29518,43.3753],["284",1.32624,43.36739],["1550",1.29518,43.3753]]},{"n":"Route du Gaillard du Port","p":[["13",1.28393,43.37482],["17",1.28393,43.37482],["26",1.28448,43.37514],["34",1.28675,43.37565],["36",1.28687,43.37518],["38",1.28638,43.37562],["38 bis",1.28651,43.37562],["40",1.28601,43.3756],["42",1.28583,43.37559],["44",1.28448,43.37514],["50",1.28394,43.37467],["50 bis",1.28372,43.37428],["72",1.28332,43.37341],["74",1.28327,43.37333],["76",1.28448,43.37514],["78",1.28334,43.37347],["80",1.2831,43.37294]]},{"n":"Rue des Artisans","p":[["1",1.29124,43.37668],["3",1.29102,43.3765],["6",1.29106,43.3765],["8",1.29102,43.37647],["17",1.29091,43.37624]]},{"n":"Rue des Dames Maltaises","p":[["2",1.29144,43.37645]]},{"n":"Rue des Ecoles","p":[["1",1.29074,43.3755],["5",1.29052,43.37541],["7",1.29064,43.37526]]},{"n":"Rue du Colonel Carriere","p":[["1",1.29304,43.37578],["2",1.29296,43.37587],["3",1.29303,43.37591],["4",1.29296,43.37602],["5",1.29306,43.37599],["8",1.29293,43.37633],["9",1.29308,43.37609],["12",1.29352,43.37773],["13",1.29304,43.37636],["16",1.29292,43.37653],["18",1.29333,43.37695],["19",1.29329,43.37666],["20",1.29299,43.37712],["21",1.29316,43.37676],["23",1.29321,43.37684],["25",1.29328,43.37693],["31",1.2937,43.37761]]},{"n":"Rue du Curé Latour","p":[["1",1.29188,43.37583],["3",1.29179,43.37563],["8",1.29177,43.37548]]},{"n":"Rue du Pountil","p":[["1",1.29262,43.37429],["2",1.29279,43.37428],["3",1.29275,43.37423],["4",1.29304,43.37419],["5",1.29289,43.37417],["6",1.29332,43.37401],["7",1.29303,43.37412],["8",1.29337,43.374],["9",1.29317,43.37407],["10",1.29413,43.37382],["11",1.29332,43.37401],["12",1.29414,43.37438],["13",1.29347,43.37396],["13 bis",1.29358,43.37393],["13 ter",1.29368,43.37389],["14",1.29472,43.37397],["14 bis",1.29475,43.37428],["14 ter",1.29505,43.37418],["15",1.29379,43.37386],["15 bis",1.2939,43.37382],["15 ter",1.294,43.37378],["17",1.29411,43.37374],["18",1.29483,43.37352],["19",1.29432,43.37365],["20",1.2954,43.37419],["20 bis",1.29495,43.37338],["20 quart",1.29533,43.3737],["20 ter",1.29522,43.37326],["21",1.29432,43.37365],["22",1.2955,43.37325],["23",1.29432,43.37365],["24",1.2958,43.37312],["25",1.29432,43.37365],["27",1.2942,43.3737],["27 a",1.29447,43.37358],["27 b",1.2943,43.37338],["29",1.29447,43.37358],["31",1.29459,43.37339],["33",1.2948,43.37339],["33 bis",1.29472,43.37324],["33 quart",1.29538,43.37292],["33 ter",1.29497,43.37307],["37",1.29522,43.37317],["39",1.29545,43.37317],["41",1.29563,43.3731],["43",1.29616,43.37297]]},{"n":"Rue du Thecle Blanc","p":[["1",1.29176,43.37527],["2",1.29184,43.3753],["3",1.29177,43.37525],["4",1.29197,43.37527],["5",1.29183,43.37525],["6",1.29221,43.37526],["10",1.29259,43.37517],["12",1.2928,43.37524],["13",1.29256,43.37508],["14",1.29281,43.37518]]},{"n":"Rue Gerard Cavaille","p":[["1",1.29003,43.37457],["3",1.29058,43.37458],["6",1.29139,43.37451],["7",1.29067,43.37368],["8",1.29156,43.37447],["12",1.29186,43.37441],["14",1.29198,43.37439],["21",1.29003,43.37457]]},{"n":"Rue May","p":[["1",1.29142,43.37647],["2",1.29144,43.37645],["3",1.29132,43.37641],["5",1.29124,43.37632],["7",1.29116,43.37625],["8",1.29125,43.37628],["11",1.29099,43.37612]]},{"n":"Rue Parmentier","p":[["1",1.29091,43.37552],["2",1.29121,43.37548],["4",1.29132,43.37545],["6",1.29141,43.37542]]},{"n":"Rue Pasteur","p":[["1",1.29218,43.37664],["2",1.29214,43.37671],["3",1.29259,43.37653],["5",1.29278,43.37648],["6",1.29235,43.37664],["8",1.29244,43.37662],["10",1.29261,43.3766]]},{"n":"Saint-Genies","p":[["147",1.32226,43.37376]]}],"c":656};
+let LH="";
+function splitL(l,d){const o=[];let c="",q=false;for(let i=0;i<l.length;i++){const ch=l[i];if(ch=='"'){if(q&&l[i+1]=='"'){c+='"';i++}else q=!q}else if(ch===d&&!q){o.push(c);c=""}else c+=ch}o.push(c);return o}
+function parseAddr(t){
+  t=t.replace(/^\uFEFF/,"");
+  const L=t.split(/\r?\n/);
+  LH=(L[0]||"").slice(0,150);
+  const d=[";",",","\t"].map(x=>[x,(L[0]||"").split(x).length]).sort((a,b)=>b[1]-a[1])[0][0];
+  const hd=splitL(L[0]||"",d).map(s=>s.trim().toLowerCase());
+  const ix=(...k)=>{for(const x of k){const i=hd.indexOf(x);if(i>=0)return i}return -1};
+  const iN=ix("numero"),iR=ix("rep","suffixe"),iV=ix("nom_voie","voie_nom","toponyme"),iX=ix("lon","long","longitude"),iY=ix("lat","latitude");
+  if(iN<0||iV<0||iX<0||iY<0)throw new Error("colonnes manquantes");
+  const m={};let c=0;
+  for(let i=1;i<L.length;i++){
+    if(!L[i])continue;
+    const r=splitL(L[i],d);
+    const num=parseInt(r[iN]);if(!num||num>=9999)continue;
+    const lon=parseFloat(String(r[iX]).replace(",",".")),lat=parseFloat(String(r[iY]).replace(",",".")),nom=(r[iV]||"").trim();
+    if(!nom||isNaN(lon)||isNaN(lat))continue;
+    const rep=iR>=0?(r[iR]||"").trim():"";
+    (m[nom]=m[nom]||[]).push([num+(rep?" "+rep:""),+lon.toFixed(5),+lat.toFixed(5)]);c++;
+  }
+  if(!c)throw new Error("aucune adresse lisible");
+  return{s:Object.keys(m).sort((a,b)=>a.localeCompare(b,"fr")).map(n=>({n,p:m[n]})),c};
+}
+const norm=s=>String(s).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+document.addEventListener("input",e=>{
+  if(e.target.id!=="q")return;
+  const v=norm(e.target.value.trim());
+  document.querySelectorAll("#list .card").forEach(c=>{c.style.display=norm(c.dataset.name).includes(v)?"":"none"});
+});
+document.addEventListener("change",async e=>{
+  if(e.target.id!=="fr")return;
+  const f=e.target.files[0];if(!f)return;
+  try{const j=JSON.parse(await f.text());if(!j||!Array.isArray(j.streets))throw 0;S=j;save();msg="Sauvegarde restaurée."}catch(x){msg="Fichier de sauvegarde non reconnu."}
+  e.target.value="";render();
+});
+function renderTodo(){
+  let h=`<button class="back" data-a="back">‹ Retour</button><h2 style="margin:4px 0 8px">🔁 Repasses à faire</h2>`,n=0;
+  S.streets.forEach((s,i)=>{
+    const L=s.houses.map((x,j)=>[x,j]).filter(p=>p[0].s==="re");
+    if(!L.length)return;
+    h+=`<div class="sec">${esc(s.name)} <small>(${L.length})</small></div>`;
+    L.forEach(([x,j])=>{
+      n++;
+      const nav=x.lo!=null?`<a class="nav" href="https://www.google.com/maps/dir/?api=1&destination=${x.la},${x.lo}" target="_blank" rel="noopener">🧭</a>`:"";
+      h+=`<div class="house s-re"><div class="top"><div class="num">${esc(x.n)}${x.note?` <small style="color:var(--mut);font-weight:400">📝 ${esc(x.note)}</small>`:""}</div>${nav}<button class="st ok sel" data-a="todoS" data-i="${i}" data-h="${j}" data-v="ok">✅</button><button class="st no sel" data-a="todoS" data-i="${i}" data-h="${j}" data-v="no">❌</button></div></div>`;
+    });
+  });
+  if(!n)h+=`<div class="empty">Aucune repasse à faire. Bravo ! 🎉</div>`;
+  return h;
+}
+async function apiNear(lat,lon){
+  try{
+    const r=await fetch("https://api-adresse.data.gouv.fr/reverse/?lon="+lon+"&lat="+lat+"&limit=15&type=housenumber");
+    const j=await r.json(),m={};
+    (j.features||[]).forEach(f=>{const p=f.properties,g=f.geometry.coordinates;if(!p.housenumber||!p.street)return;(m[p.street]=m[p.street]||[]).push([p.housenumber,g[0],g[1]])});
+    const s=Object.keys(m).map(n=>({n,p:m[n]}));
+    if(!s.length)throw 0;
+    near={lat,lon,A:{s}};
+  }catch(e){near={err:1};msg="Impossible de charger les adresses ici (réseau ?). Utilise la liste ou ajoute les numéros à la main."}
+  render();
+}
+let MAP=null;
+function drawMap(){
+  const el=$("#map");
+  if(!window.L){el.innerHTML='<div class="hint" style="padding:12px">Carte indisponible (pas de connexion).</div>';return}
+  if(MAP){MAP.remove();MAP=null}
+  MAP=L.map("map");
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(MAP);
+  const col={ok:"#2e7d4f",re:"#e08a00",no:"#c8281e"},pts=[];let ch=false;
+  S.streets.forEach(s=>s.houses.forEach(x=>{
+    if(!x.s)return;
+    if(x.lo==null&&A){const st=A.s.find(y=>y.n.toLowerCase()===s.name.toLowerCase()),q=st&&st.p.find(z=>String(z[0]).toLowerCase()===String(x.n).toLowerCase());if(q){x.lo=q[1];x.la=q[2];ch=true}}
+    if(x.lo==null)return;
+    L.circleMarker([x.la,x.lo],{radius:9,color:"#fff",weight:2,fillColor:col[x.s],fillOpacity:.95}).addTo(MAP).bindPopup("<b>"+esc(x.n)+" "+esc(s.name)+"</b>"+(x.note?"<br>"+esc(x.note):""));
+    pts.push([x.la,x.lo]);
+  }));
+  if(ch)save();
+  if(pts.length)MAP.fitBounds(pts,{padding:[30,30],maxZoom:18});else MAP.setView([43.376,1.292],14);
+}
+async function init(){
+  const l=local();if(l&&l.streets)S=l;
+  try{const a=JSON.parse(localStorage.getItem("tournee-addr"));if(a&&a.s)A=a}catch(e){}
+  if(!A)A=EMB;
+  render();setSt("Enregistré sur ce téléphone");
+  try{
+    if(!window.claude)return;
+    const [d,u]=await Promise.all([claude.use("db"),claude.use("user")]);
+    if(!d||!u)return;
+    const id=await u.id();if(!id)return;
+    doc=d.doc("data/users/"+id+"/tournee");adoc=d.doc("data/users/"+id+"/adresses");
+    const snap=await doc.get();
+    if(snap.exists){
+      const j=JSON.parse(snap.data().json);
+      if(j&&j.streets){S=j;saveLocal()}
+    }else if(S.streets.length){await doc.set({json:JSON.stringify(S)})}
+    try{const as=await adoc.get();if(as.exists){const j=JSON.parse(as.data().json);if(j&&j.s){A=j;try{localStorage.setItem("tournee-addr",as.data().json)}catch(e){}}}else if(A){await adoc.set({json:JSON.stringify(A)})}}catch(e){}
+    render();setSt("Synchronisé avec ton compte");
+  }catch(e){}
+}
+init();
+</script></body></html>
